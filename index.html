@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TLP Stream Calculator</title>
+<meta name="theme-color" content="#14161a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bitrate">
+<style>
+  :root{
+    --bg:#14161a; --card:#1c1f25; --card2:#23272f; --line:#2e333c;
+    --text:#eceae6; --muted:#9aa0aa; --gold:#e0b35f; --gold2:#f0c36d;
+    --green:#4cc38a; --orange:#f0a24a; --red:#ef6461;
+    --r:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px 16px 40px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand img{width:40px;height:40px;border-radius:10px}
+  .brand h1{font-size:18px;margin:0;letter-spacing:.2px}
+  .brand small{display:block;color:var(--muted);font-size:12px;font-weight:400}
+  button{font:inherit;cursor:pointer}
+  .btn{background:var(--card2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+  .btn:hover{border-color:#444b57}
+  .btn.gold{background:var(--gold);color:#1a1a1a;border-color:var(--gold);font-weight:600}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:900px){.grid{grid-template-columns:1.05fr .95fr}.sticky{position:sticky;top:16px}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:0 0 12px;font-weight:600}
+  .card + .card{margin-top:16px}
+  label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
+  .field{margin-bottom:14px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  input[type=number],input[type=text],select{
+    width:100%;background:var(--card2);color:var(--text);border:1px solid var(--line);
+    border-radius:10px;padding:11px 12px;font:inherit;font-size:16px;outline:none;-webkit-appearance:none;appearance:none}
+  select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+    background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px;background-repeat:no-repeat;padding-right:34px}
+  input:focus,select:focus{border-color:var(--gold)}
+  .unit{position:relative}
+  .unit span{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+  .unit input{padding-right:58px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:8px 13px;font-size:14px}
+  .chip.on{background:rgba(224,179,95,.15);border-color:var(--gold);color:var(--gold2)}
+  .chip small{color:var(--muted);margin-left:4px}
+  input[type=range]{width:100%;accent-color:var(--gold)}
+  .rangeval{float:right;color:var(--gold2);font-weight:600}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  /* result */
+  .status{display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:12px;margin-bottom:14px;font-size:14px}
+  .status b{display:block;font-size:15px}
+  .status .dot{width:12px;height:12px;border-radius:50%;margin-top:4px;flex:none}
+  .s-green{background:rgba(76,195,138,.1);border:1px solid rgba(76,195,138,.35)} .s-green .dot{background:var(--green)}
+  .s-orange{background:rgba(240,162,74,.1);border:1px solid rgba(240,162,74,.35)} .s-orange .dot{background:var(--orange)}
+  .s-red{background:rgba(239,100,97,.1);border:1px solid rgba(239,100,97,.35)} .s-red .dot{background:var(--red)}
+  .big{text-align:center;padding:6px 0 12px}
+  .big .lbl{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .big .num{font-size:52px;font-weight:700;letter-spacing:-1px;color:var(--gold2);line-height:1.1;font-variant-numeric:tabular-nums}
+  .big .num small{font-size:18px;color:var(--muted);font-weight:500;margin-left:4px}
+  .big .sub{color:var(--muted);font-size:13px}
+  .meter{position:relative;height:12px;background:var(--card2);border-radius:999px;margin:16px 0 26px;border:1px solid var(--line)}
+  .meter .band{position:absolute;top:0;bottom:0;background:linear-gradient(90deg,rgba(224,179,95,.25),rgba(224,179,95,.55));border-radius:999px}
+  .meter .mark{position:absolute;top:-5px;width:3px;height:20px;border-radius:2px;transform:translateX(-50%)}
+  .meter .mark i{position:absolute;top:22px;left:50%;transform:translateX(-50%);font-style:normal;font-size:11px;white-space:nowrap;color:var(--muted)}
+  .m-adv{background:var(--gold2)} .m-avail{background:var(--green)} .m-cap{background:var(--red)}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{background:var(--card2);border-radius:12px;padding:10px 12px}
+  .stat .k{font-size:12px;color:var(--muted)}
+  .stat .v{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+  .stat .v small{font-size:12px;color:var(--muted);font-weight:400}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td{padding:8px 0;border-bottom:1px solid var(--line)}
+  td:last-child{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:0}
+  ul.tips{margin:0;padding-left:18px} ul.tips li{margin:4px 0;font-size:14px}
+  ul.tips li.warn{color:var(--orange)}
+  .profiles{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .profile{display:flex;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  .profile button{background:none;border:0;color:var(--text);padding:7px 10px;font-size:14px}
+  .profile button.x{color:var(--muted);padding-left:2px}
+  .copy{float:right;font-size:12px;padding:4px 9px}
+  footer{color:var(--muted);font-size:12px;margin-top:24px;text-align:center}
+  .mbar{position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;
+    background:rgba(28,31,37,.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:14px;padding:10px 14px;z-index:5}
+  .mbar .dot{width:10px;height:10px;border-radius:50%}
+  .mbar .t{flex:1;font-size:13px;color:var(--muted)} .mbar .t b{display:block;color:var(--text);font-size:14px}
+  .mbar .n{font-size:22px;font-weight:700;color:var(--gold2);font-variant-numeric:tabular-nums} .mbar .n small{font-size:12px;color:var(--muted);font-weight:500}
+  @media(min-width:900px){.mbar{display:none}}
+  @media(max-width:899px){.wrap{padding-bottom:96px}}
+  .st-gauge{text-align:center;padding:8px 0 4px}
+  .st-gauge .ph{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;min-height:18px}
+  .st-gauge .num{font-size:46px;font-weight:700;color:var(--gold2);font-variant-numeric:tabular-nums;line-height:1.1}
+  .st-gauge .num small{font-size:16px;color:var(--muted);font-weight:500;margin-left:4px}
+  .prog{height:6px;background:var(--card2);border-radius:999px;overflow:hidden;margin:10px 0 14px}
+  .prog div{height:100%;width:0;background:var(--gold);transition:width .25s linear}
+  .st-res{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .st-res .stat .v{font-size:16px}
+  .st-adv{background:rgba(224,179,95,.08);border:1px solid rgba(224,179,95,.35);border-radius:12px;padding:12px;margin-top:4px}
+  .st-adv b.t{display:block;color:var(--gold2);font-size:17px;margin:2px 0 6px}
+  .st-adv ul{margin:8px 0 0;padding-left:18px;font-size:13px} .st-adv li{margin:3px 0}
+  .st-adv li.warn{color:var(--orange)}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .btn.big{width:100%;padding:13px;font-size:16px}
+  .hidden{display:none!important}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--gold);color:#111;padding:9px 14px;border-radius:10px;font-weight:600;opacity:0;transition:.2s;pointer-events:none}
+  .toast.on{opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <img src="icon-192.png" alt="">
+      <h1>Stream Calculator<small>The Light Portraits · intern</small></h1>
+    </div>
+    <button id="installBtn" class="btn gold hidden">Installeer app</button>
+  </header>
+
+  <div class="grid">
+    <!-- INPUT -->
+    <div>
+      <div class="card" id="stCard">
+        <h2>Snelheidstest</h2>
+        <div class="st-gauge">
+          <div class="ph" id="stPhase">Test de verbinding op de plek waar je gaat streamen</div>
+          <div class="num"><span id="stNum">–</span><small id="stUnit">Mbps</small></div>
+        </div>
+        <div class="prog"><div id="stProg"></div></div>
+        <div class="st-res hidden" id="stRes">
+          <div class="stat"><div class="k">Ping</div><div class="v" id="rPing">–</div></div>
+          <div class="stat"><div class="k">Jitter</div><div class="v" id="rJit">–</div></div>
+          <div class="stat"><div class="k">Download</div><div class="v" id="rDown">–</div></div>
+          <div class="stat"><div class="k">Upload gem.</div><div class="v" id="rUp">–</div></div>
+          <div class="stat"><div class="k">Upload stabiel</div><div class="v" id="rUpS">–</div></div>
+          <div class="stat"><div class="k">Stabiliteit</div><div class="v" id="rStab">–</div></div>
+        </div>
+        <div class="st-adv hidden" id="stAdv"></div>
+        <button class="btn gold big" id="stBtn">Start snelheidstest</button>
+        <div class="hint" id="stWhen">Test op het apparaat en de aansluiting die straks echt streamt (bijv. encoder-pc via UTP). De test duurt ongeveer 20 seconden.</div>
+      </div>
+
+      <div class="card">
+        <h2>1 · Verbinding op locatie</h2>
+        <div class="field">
+          <label>Type verbinding</label>
+          <div class="chips" id="connChips"></div>
+          <div class="hint" id="connHint"></div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="upload">Gemeten upload</label>
+            <div class="unit"><input id="upload" type="number" inputmode="decimal" min="0" step="0.1" value="20"><span>Mbps</span></div>
+            <div class="hint"><a href="https://www.speedtest.net" target="_blank" rel="noopener" style="color:var(--gold)">Speedtest</a> · <a href="https://fast.com" target="_blank" rel="noopener" style="color:var(--gold)">fast.com</a></div>
+          </div>
+          <div class="field">
+            <label for="streams">Gelijktijdige uploads</label>
+            <select id="streams">
+              <option value="1">1 stream</option>
+              <option value="2">2 (bijv. YouTube + Facebook)</option>
+              <option value="3">3 streams</option>
+              <option value="4">4 streams</option>
+            </select>
+            <div class="hint">Via Restream/vMix Call = 1 upload</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Deel van upload voor stream <span class="rangeval" id="shareVal">70%</span></label>
+          <input id="share" type="range" min="30" max="90" step="5" value="70">
+          <div class="hint">De rest blijft vrij als buffer voor pieken, andere apparaten en schommelingen.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2 · Beeld</h2>
+        <div class="field">
+          <label>Resolutie</label>
+          <div class="chips" id="resChips"></div>
+        </div>
+        <div class="row" id="customRes">
+          <div class="field"><label for="w">Breedte</label><input id="w" type="number" inputmode="numeric" value="1920"></div>
+          <div class="field"><label for="h">Hoogte</label><input id="h" type="number" inputmode="numeric" value="1080"></div>
+        </div>
+        <div class="field">
+          <label>Framerate</label>
+          <div class="chips" id="fpsChips"></div>
+        </div>
+        <div class="field">
+          <label>Kwaliteitsniveau</label>
+          <div class="chips" id="qualChips"></div>
+          <div class="hint" id="qualHint"></div>
+        </div>
+        <div class="field">
+          <label>Beweging in beeld</label>
+          <div class="chips" id="motionChips"></div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="codec">Codec</label>
+            <select id="codec">
+              <option value="h264">H.264 (AVC)</option>
+              <option value="hevc">H.265 (HEVC)</option>
+              <option value="av1">AV1</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="audio">Audio (AAC)</label>
+            <select id="audio">
+              <option value="128">128 kbps</option>
+              <option value="160">160 kbps</option>
+              <option value="192" selected>192 kbps</option>
+              <option value="256">256 kbps</option>
+              <option value="320">320 kbps</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3 · Platform</h2>
+        <div class="chips" id="platChips"></div>
+        <div class="hint" id="platHint"></div>
+      </div>
+
+      <div class="card">
+        <h2>Productieprofielen</h2>
+        <div style="display:flex;gap:8px">
+          <input id="profName" type="text" placeholder="Bijv. Podcast studio, Bruiloft kerk…">
+          <button class="btn gold" id="saveProf">Bewaar</button>
+        </div>
+        <div class="profiles" id="profiles"></div>
+        <div class="hint">Profielen worden lokaal op dit apparaat bewaard.</div>
+      </div>
+    </div>
+
+    <!-- OUTPUT -->
+    <div class="sticky">
+      <div class="card">
+        <h2>Advies</h2>
+        <div class="status" id="status"><div class="dot"></div><div></div></div>
+        <div class="big">
+          <div class="lbl">Video bitrate instellen op</div>
+          <div class="num"><span id="adv">0</span><small>kbps</small></div>
+          <div class="sub" id="advSub"></div>
+        </div>
+        <div class="meter" id="meter">
+          <div class="band" id="band"></div>
+          <div class="mark m-avail" id="mAvail"><i>beschikbaar</i></div>
+          <div class="mark m-cap hidden" id="mCap"><i>platform max</i></div>
+          <div class="mark m-adv" id="mAdv"><i>advies</i></div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="k">Ideaal bereik</div><div class="v" id="range">–</div></div>
+          <div class="stat"><div class="k">Beschikbaar per stream</div><div class="v" id="avail">–</div></div>
+          <div class="stat"><div class="k">Upload nodig voor doel</div><div class="v" id="need">–</div></div>
+          <div class="stat"><div class="k">Dataverbruik</div><div class="v" id="data">–</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Encoder-instellingen <button class="btn copy" id="copyBtn">Kopieer</button></h2>
+        <table id="enc"></table>
+      </div>
+
+      <div class="card">
+        <h2>Tips voor deze productie</h2>
+        <ul class="tips" id="tips"></ul>
+      </div>
+    </div>
+  </div>
+
+  <footer>Richtwaarden op basis van bits-per-pixel en de publieke richtlijnen van de platforms. Doe altijd een teststream op locatie.</footer>
+</div>
+<div class="mbar" id="mbar"><div class="dot" id="mDot"></div><div class="t"><b id="mTitle"></b><span id="mSub"></span></div><div class="n"><span id="mNum"></span><small> kbps</small></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+
+  // ---------- Data ----------
+  const CONN = {
+    utp:    {label:'UTP / kabel', share:75, hint:'Vaste kabel: het meest stabiel. 75% is veilig als de lijn alleen voor jou is.'},
+    wifi:   {label:'Wi-Fi', share:50, hint:'Wi-Fi schommelt sterk door andere gebruikers en storing. Liever UTP of 50% marge.'},
+    mobile: {label:'4G / 5G', share:40, hint:'Mobiel netwerk wisselt per minuut, zeker met veel publiek. Houd ruime marge.'},
+    bonded: {label:'Bonding', share:60, hint:'Gebundelde verbindingen (bijv. Speedify, LiveU): tel alle lijnen samen als upload.'}
+  };
+  const RES = [
+    {k:'720',  label:'720p',  w:1280, h:720},
+    {k:'1080', label:'1080p', w:1920, h:1080},
+    {k:'1440', label:'1440p', w:2560, h:1440},
+    {k:'2160', label:'4K',    w:3840, h:2160},
+    {k:'v1080',label:'Verticaal 9:16', w:1080, h:1920},
+    {k:'custom',label:'Eigen', w:null, h:null}
+  ];
+  const FPS = [25, 30, 50, 60];
+  // bits per pixel (H.264): 0.04 laag / 0.08 hoog, gekalibreerd op de YouTube- en Twitch-richtlijnen
+  const MOTION = {
+    low:  {label:'Rustig', sub:'podcast, interview', pos:0},
+    mid:  {label:'Gemiddeld', sub:'ceremonie, presentatie', pos:.5},
+    high: {label:'Veel', sub:'dans, sport, concert', pos:1}
+  };
+  const QUAL = {
+    std:  {label:'Platform-advies', f:1,    hint:'Volgt de aanbevelingen van het platform.'},
+    high: {label:'Hoog', f:1.25, hint:'25% boven de aanbeveling: scherper bij details en beweging.'},
+    max:  {label:'Maximaal', f:1.5,  hint:'50% boven de aanbeveling, zolang je verbinding en het platform het toelaten. Het beste beeld voor je klant.'}
+  };
+  const CODEC = {h264:{f:1, name:'H.264'}, hevc:{f:.65, name:'H.265 / HEVC'}, av1:{f:.55, name:'AV1'}};
+  // Platformen: cap = max video kbps (null = geen), maxH = max hoogte, codecs = toegestaan
+  const PLAT = {
+    youtube:  {label:'YouTube', cap:51000, maxH:2160, codecs:['h264','hevc','av1'],
+               hint:'YouTube accepteert H.264, HEVC en AV1 tot 4K (ingest tot ~51 Mbps). Basis is de YouTube-tabel, verhoogd met je kwaliteitsniveau.'},
+    twitch:   {label:'Twitch', cap:6000, maxH:1080, maxFps:60, codecs:['h264'],
+               hint:'Twitch: max ~6.000 kbps, 1080p60 en alleen H.264 (hoger alleen via Enhanced Broadcasting).'},
+    facebook: {label:'Facebook', cap:6000, maxH:1080, maxFps:60, codecs:['h264'],
+               hint:'Facebook Live: richtwaarde max ~6.000 kbps en 1080p, H.264. Controleer bij grote events.'},
+    instagram:{label:'Instagram', cap:4000, maxH:1920, codecs:['h264'],
+               hint:'Instagram Live via stream key: verticaal 9:16 aanbevolen, H.264, houd het rond 3–4 Mbps.'},
+    custom:   {label:'Eigen server / vMix / Restream', cap:null, maxH:99999, codecs:['h264','hevc','av1'],
+               hint:'Geen platformlimiet: alleen je verbinding bepaalt het maximum. Check wat de ontvanger aankan.'}
+  };
+  // YouTube aanbevolen bereik (H.264), per hoogte, >30 fps vs ≤30 fps
+  const YT = {2160:{hi:[20000,51000],lo:[13000,34000]},1440:{hi:[9000,18000],lo:[6000,13000]},
+              1080:{hi:[4500,9000],lo:[3000,6000]},720:{hi:[2250,6000],lo:[1500,4000]}};
+
+  // ---------- State ----------
+  const DEF = {conn:'utp', upload:20, share:75, streams:1, res:'1080', w:1920, h:1080, fps:50,
+               motion:'mid', qual:'max', codec:'h264', audio:192, plat:'youtube'};
+  let S = Object.assign({}, DEF);
+  const store = {
+    get(k,d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+    set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  };
+  S = Object.assign(S, store.get('tlp_bitrate_state', {}));
+
+  // ---------- Helpers ----------
+  const fmt = n => Math.round(n).toLocaleString('nl-NL');
+  const mbps = kbps => (kbps/1000).toLocaleString('nl-NL',{maximumFractionDigits:1});
+  const round100 = n => Math.max(0, Math.floor(n/100)*100);
+
+  function chips(el, items, key, onPick){
+    el.innerHTML = '';
+    items.forEach(it => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (String(S[key]) === String(it.v) ? ' on' : '');
+      b.innerHTML = it.label + (it.sub ? '<small>'+it.sub+'</small>' : '');
+      b.onclick = () => { onPick(it.v); render(); };
+      el.appendChild(b);
+    });
+  }
+
+  function bitrateRange(w, h, fps, codec){
+    const px = w*h*fps;
+    const f = CODEC[codec].f;
+    return {low: .04*px/1000*f, high: .08*px/1000*f};
+  }
+
+  function ytRange(w,h,fps,codec){
+    const short = Math.min(w,h);
+    const keys = [2160,1440,1080,720];
+    const k = keys.find(x => short >= x*0.95) || 720;
+    const r = YT[k][fps > 30 ? 'hi' : 'lo'];
+    const f = codec === 'h264' ? 1 : CODEC[codec].f;
+    return {low:r[0]*f, high:r[1]*f};
+  }
+
+  function targetFor(r){ return (r.low + (r.high - r.low) * MOTION[S.motion].pos) * QUAL[S.qual || 'max'].f; }
+  function rangeFor(w,h,fps){ return S.plat === 'youtube' ? ytRange(w,h,fps,S.codec) : bitrateRange(w,h,fps,S.codec); }
+
+  // ---------- Calc ----------
+  function calc(){
+    const P = PLAT[S.plat];
+    const w = +S.w || 1920, h = +S.h || 1080, fps = +S.fps;
+    let r = S.plat === 'youtube' ? ytRange(w,h,fps,S.codec) : bitrateRange(w,h,fps,S.codec);
+    // Voor youtube: combineer met bpp zodat beweging meetelt
+    const target = targetFor(r);
+    const availTotal = S.upload * 1000 * S.share / 100;
+    const avail = availTotal / S.streams - S.audio;
+    const cap = P.cap;
+    let adv = Math.min(target, avail, cap ?? Infinity);
+    adv = round100(adv);
+    const need = (target + S.audio) * S.streams / (S.share/100) / 1000; // Mbps
+    const gbHour = (adv + S.audio) * S.streams * 3600 / 8 / 1e6;
+    return {w,h,fps,r,target,avail,cap,adv,need,gbHour,P};
+  }
+
+  function suggestFit(limit, w, h){
+    const vertical = h > w;
+    const opts = [];
+    const sizes = vertical ? [[1080,1920],[720,1280]] : [[3840,2160],[2560,1440],[1920,1080],[1280,720]];
+    sizes.forEach(([sw,sh]) => [60,50,30,25].forEach(f => {
+      const rr = S.plat === 'youtube' ? ytRange(sw,sh,f,S.codec) : bitrateRange(sw,sh,f,S.codec);
+      if (rr.low <= limit && (PLAT[S.plat].maxH >= Math.min(sw,sh)) ) opts.push({sw,sh,f,score:sw*sh*Math.min(f,50)+f});
+    }));
+    opts.sort((a,b)=>b.score-a.score);
+    return opts[0];
+  }
+
+  // ---------- Render ----------
+  function render(){
+    // inputs
+    chips($('connChips'), Object.entries(CONN).map(([v,c])=>({v,label:c.label})), 'conn', v => { S.conn = v; S.share = CONN[v].share; });
+    $('connHint').textContent = CONN[S.conn].hint;
+    chips($('resChips'), RES.map(r=>({v:r.k,label:r.label})), 'res', v => {
+      S.res = v; const r = RES.find(x=>x.k===v); if (r.w){ S.w = r.w; S.h = r.h; }
+    });
+    $('customRes').classList.toggle('hidden', S.res !== 'custom');
+    chips($('fpsChips'), FPS.map(f=>({v:f,label:f+' fps'})), 'fps', v => S.fps = v);
+    chips($('qualChips'), Object.entries(QUAL).map(([v,q])=>({v,label:q.label})), 'qual', v => S.qual = v);
+    $('qualHint').textContent = QUAL[S.qual||'max'].hint;
+    chips($('motionChips'), Object.entries(MOTION).map(([v,m])=>({v,label:m.label,sub:m.sub})), 'motion', v => S.motion = v);
+    chips($('platChips'), Object.entries(PLAT).map(([v,p])=>({v,label:p.label})), 'plat', v => S.plat = v);
+    $('platHint').textContent = PLAT[S.plat].hint;
+    const setv = (id, v) => { const el = $(id); if (document.activeElement !== el) el.value = v; };
+    setv('upload', S.upload); setv('share', S.share); $('shareVal').textContent = S.share + '%';
+    setv('streams', S.streams); setv('w', S.w); setv('h', S.h);
+    setv('codec', S.codec); setv('audio', S.audio);
+
+    const c = calc();
+    store.set('tlp_bitrate_state', S);
+
+    // status
+    let cls, title, txt;
+    const limit = Math.min(c.avail, c.cap ?? Infinity);
+    if (c.avail <= 0 || S.upload <= 0){
+      cls='s-red'; title='Geen bruikbare upload'; txt='Vul je gemeten uploadsnelheid in.';
+    } else if (limit >= c.target){
+      cls='s-green'; title = S.qual==='max' ? 'Maximale kwaliteit haalbaar' : 'Ruim voldoende';
+      txt = c.cap && c.cap < c.avail ? 'Je verbinding kan meer aan dan '+c.P.label+' toestaat.' : 'Je verbinding kan deze kwaliteit stabiel aan.';
+    } else if (c.cap && c.cap <= c.avail && c.adv >= c.target / QUAL[S.qual||'max'].f){
+      cls='s-green'; title='Maximaal wat '+c.P.label+' toestaat';
+      txt='Je verbinding kan meer aan; je zit op het plafond van '+c.P.label+' en ruim boven hun advies.';
+    } else if (limit >= c.r.low){
+      cls='s-orange'; title='Goed, maar onder je gekozen kwaliteitsniveau';
+      txt = c.cap && c.cap < c.target ? c.P.label+' beperkt de bitrate; bij veel beweging kan het beeld blokkerig worden.' : 'Binnen het bereik, maar met weinig reserve. Overweeg '+(c.fps>30?'een lagere framerate.':'een lagere resolutie of een snellere lijn.');
+    } else {
+      cls='s-red'; title='Te weinig bandbreedte voor deze instelling';
+      const s = suggestFit(limit, c.w, c.h);
+      txt = s ? 'Advies: ga naar '+s.sw+'×'+s.sh+' @ '+s.f+' fps.' : 'Zelfs 720p past niet. Zoek een betere verbinding of gebruik bonding.';
+    }
+    $('status').className = 'status ' + cls;
+    $('status').children[1].innerHTML = '<b>'+title+'</b>'+txt;
+
+    $('adv').textContent = fmt(c.adv);
+    $('mNum').textContent = fmt(c.adv); $('mTitle').textContent = title;
+    $('mSub').textContent = c.h+'p'+c.fps+' · '+c.P.label;
+    $('mDot').style.background = {'s-green':'var(--green)','s-orange':'var(--orange)','s-red':'var(--red)'}[cls];
+    $('advSub').textContent = c.w+'×'+c.h+' @ '+c.fps+' fps · '+CODEC[S.codec].name+' · + '+S.audio+' kbps audio';
+    $('range').innerHTML = fmt(c.r.low)+'–'+fmt(c.r.high)+' <small>kbps</small>';
+    $('range').previousElementSibling.textContent = S.plat==='youtube' ? 'YouTube-aanbeveling' : 'Richtbereik';
+    $('avail').innerHTML = fmt(Math.max(0,c.avail))+' <small>kbps</small>';
+    $('need').innerHTML = mbps(c.need*1000)+' <small>Mbps</small>';
+    $('data').innerHTML = c.gbHour.toLocaleString('nl-NL',{maximumFractionDigits:1})+' <small>GB/uur</small>';
+
+    // meter
+    const base = Math.max(c.r.high, c.target, Math.max(0,c.avail), 1);
+    const capIn = c.cap && c.cap <= base * 1.5;
+    const max = Math.max(base, capIn ? c.cap : 0) * 1.1;
+    const pct = v => Math.min(100, Math.max(0, v/max*100)) + '%';
+    $('band').style.left = pct(c.r.low); $('band').style.width = (Math.min(c.r.high,max)-c.r.low)/max*100 + '%';
+    $('mAdv').style.left = pct(c.adv);
+    $('mAvail').style.left = pct(Math.max(0,c.avail));
+    $('mCap').classList.toggle('hidden', !capIn);
+    $('mAvail').querySelector('i').style.visibility = Math.abs(c.adv - c.avail)/max < .14 ? 'hidden' : 'visible';
+    if (c.avail > max) $('mAvail').style.left = '100%';
+    if (c.cap) $('mCap').style.left = pct(c.cap);
+
+    // encoder table
+    const enc = [
+      ['Uitvoerresolutie', c.w+' × '+c.h],
+      ['Framerate', c.fps+' fps'],
+      ['Encoder', CODEC[S.codec].name],
+      ['Rate control', 'CBR'],
+      ['Video bitrate', fmt(c.adv)+' kbps'],
+      ['Keyframe-interval', '2 s (GOP '+(c.fps*2)+')'],
+      ['Profiel', S.codec==='h264' ? 'High' : 'Main'],
+      ['Audio', 'AAC · '+S.audio+' kbps · 48 kHz stereo'],
+      ['Totaal per stream', fmt(c.adv + S.audio)+' kbps']
+    ];
+    $('enc').innerHTML = enc.map(([k,v])=>'<tr><td>'+k+'</td><td>'+v+'</td></tr>').join('');
+    window.__enc = enc;
+
+    // tips
+    const tips = [];
+    const P = c.P;
+    if (!P.codecs.includes(S.codec)) tips.push(['warn', P.label+' accepteert geen '+CODEC[S.codec].name+'. Kies H.264.']);
+    if (Math.min(c.w,c.h) > P.maxH) tips.push(['warn', P.label+' streamt maximaal '+P.maxH+'p; hogere resolutie wordt geschaald of geweigerd.']);
+    if (P.maxFps && c.fps > P.maxFps) tips.push(['warn', P.label+' ondersteunt max '+P.maxFps+' fps.']);
+    if (S.plat==='instagram' && c.w > c.h) tips.push(['warn','Instagram Live is verticaal: kies 9:16 om zwarte balken te voorkomen.']);
+    if (S.conn==='wifi') tips.push(['warn','Vraag op locatie om een UTP-aansluiting; Wi-Fi zakt in zodra het publiek binnenkomt.']);
+    if (S.conn==='mobile') tips.push(['warn','Bij veel publiek raakt de mast vol. Overweeg bonding of een back-up lijn.']);
+    if (S.conn==='utp') tips.push(['', 'Vraag de locatie om een eigen (V)LAN of vaste poort, en test op hetzelfde tijdstip als het event.']);
+    if (S.streams > 1) tips.push(['', 'Met '+S.streams+' streams deel je je upload. Via Restream of een cloud-multistream upload je maar één keer.']);
+    if (S.motion==='high' && c.fps <= 30) tips.push(['', 'Bij veel beweging oogt 50 fps vloeiender, mits de bitrate het toelaat.']);
+    tips.push(['', 'In Europa: gebruik 25 of 50 fps om flikkeren van verlichting (50 Hz) te voorkomen.']);
+    tips.push(['', 'Neem lokaal ook een ISO-opname op hogere kwaliteit op als back-up voor de aftermovie.']);
+    tips.push(['', 'Draai 10–15 minuten vóór start een privé-teststream en check de streamgezondheid.']);
+    $('tips').innerHTML = tips.map(([c,t])=>'<li class="'+c+'">'+t+'</li>').join('');
+
+    renderProfiles();
+    if (!testing && store.get('tlp_bitrate_test', null)) renderAdvice(store.get('tlp_bitrate_test', null));
+  }
+
+  // ---------- Profiles ----------
+  function renderProfiles(){
+    const list = store.get('tlp_bitrate_profiles', []);
+    $('profiles').innerHTML = '';
+    list.forEach((p,i) => {
+      const d = document.createElement('div'); d.className='profile';
+      const a = document.createElement('button'); a.textContent = p.name;
+      a.onclick = () => { S = Object.assign({}, DEF, p.s); render(); toast('Profiel geladen'); };
+      const x = document.createElement('button'); x.className='x'; x.textContent='×'; x.title='Verwijderen';
+      x.onclick = () => { list.splice(i,1); store.set('tlp_bitrate_profiles', list); renderProfiles(); };
+      d.append(a,x); $('profiles').appendChild(d);
+    });
+  }
+  $('saveProf').onclick = () => {
+    const name = $('profName').value.trim(); if (!name) return;
+    const list = store.get('tlp_bitrate_profiles', []).filter(p=>p.name!==name);
+    list.push({name, s:Object.assign({},S)}); store.set('tlp_bitrate_profiles', list);
+    $('profName').value=''; renderProfiles(); toast('Profiel bewaard');
+  };
+
+  // ---------- Inputs ----------
+  $('upload').oninput = e => { S.upload = parseFloat(e.target.value)||0; render(); };
+  $('share').oninput = e => { S.share = +e.target.value; render(); };
+  $('streams').onchange = e => { S.streams = +e.target.value; render(); };
+  $('w').oninput = e => { S.w = +e.target.value||0; render(); };
+  $('h').oninput = e => { S.h = +e.target.value||0; render(); };
+  $('codec').onchange = e => { S.codec = e.target.value; render(); };
+  $('audio').onchange = e => { S.audio = +e.target.value; render(); };
+
+  $('mbar').onclick = () => document.querySelector('.sticky').scrollIntoView({behavior:'smooth'});
+  // keep focus while typing: render rebuilds chips only, inputs keep identity
+  $('copyBtn').onclick = () => {
+    const txt = window.__enc.map(([k,v])=>k+': '+v).join('\n');
+    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(()=>toast('Gekopieerd')).catch(()=>toast('Kopiëren niet gelukt'));
+  };
+  function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('on'); setTimeout(()=>el.classList.remove('on'),1400); }
+
+  // ---------- PWA ----------
+  let deferred;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; $('installBtn').classList.remove('hidden'); });
+  $('installBtn').onclick = async () => { if(!deferred) return; deferred.prompt(); await deferred.userChoice; deferred=null; $('installBtn').classList.add('hidden'); };
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+
+  // ---------- Beste haalbare combinatie ----------
+  function bestFit(uploadMbps){
+    const P = PLAT[S.plat];
+    const limit = Math.min(uploadMbps*1000*S.share/100/S.streams - S.audio, P.cap ?? Infinity);
+    const vertical = (+S.h) > (+S.w);
+    const sizes = vertical ? [[1080,1920],[720,1280]] : [[3840,2160],[2560,1440],[1920,1080],[1280,720]];
+    const pal = [25,50].includes(+S.fps);
+    const fpsList = (pal ? [50,25] : [60,30]).filter(f => !P.maxFps || f <= P.maxFps);
+    const cands = [];
+    sizes.forEach(([w,h]) => {
+      if (Math.min(w,h) > P.maxH) return;
+      fpsList.forEach(f => {
+        const r = rangeFor(w,h,f); const t = targetFor(r);
+        const std = r.low + (r.high - r.low) * MOTION[S.motion].pos;   // platform-advies zonder boost
+        const bitrate = Math.floor(Math.min(t,limit)/100)*100;
+        cands.push({w,h,f,r,t,bitrate, full: t <= limit, good: bitrate >= std*0.9, ok: r.low <= limit});
+      });
+    });
+    // voorkeur: hoogste resolutie/fps die minstens het platform-advies haalt (met jouw boost waar mogelijk)
+    const best = cands.find(c => c.good) || cands.find(c => c.ok) || null;
+    return {limit, best, fullAvail: !!(best && best.full)};
+  }
+
+  // ---------- Snelheidstest (Cloudflare) ----------
+  const CF = 'https://speed.cloudflare.com';
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const pct = (arr, p) => { const a=[...arr].sort((x,y)=>x-y); return a.length ? a[Math.min(a.length-1, Math.floor(p*a.length))] : 0; };
+  const mean = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0;
+  let testing = false;
+
+  function phase(txt, num, unit, prog){
+    $('stPhase').textContent = txt;
+    if (num !== undefined) $('stNum').textContent = num;
+    if (unit !== undefined) $('stUnit').textContent = unit;
+    if (prog !== undefined) $('stProg').style.width = prog + '%';
+  }
+
+  async function testPing(n){
+    const t = [];
+    for (let i=0; i<n+1; i++){
+      const s0 = performance.now();
+      await fetch(CF+'/__down?bytes=0&r='+Math.random(), {cache:'no-store'});
+      if (i>0) t.push(performance.now()-s0);   // eerste meting = verbinding opzetten
+      phase('Ping meten…', Math.round(t[t.length-1]||0), 'ms', (i+1)/(n+1)*10);
+    }
+    let jit = 0; for (let i=1;i<t.length;i++) jit += Math.abs(t[i]-t[i-1]);
+    return {ping: pct(t,.5), jitter: t.length>1 ? jit/(t.length-1) : 0};
+  }
+
+  function sampler(getBytes, onTick){
+    let last = 0, lastT = performance.now(); const samples = [];
+    const id = setInterval(() => {
+      const now = performance.now(), b = getBytes();
+      const m = (b-last)*8/((now-lastT)/1000)/1e6; last=b; lastT=now; samples.push(m); onTick(m, samples);
+    }, 250);
+    return {samples, stop: () => clearInterval(id)};
+  }
+
+  async function testDown(sec){
+    let bytes = 0; const end = performance.now()+sec*1000; const ctrl = new AbortController();
+    const sm = sampler(() => bytes, (m, a) => phase('Download meten…', mean(a.slice(-8)).toFixed(0), 'Mbps', 10 + Math.min(1,a.length/(sec*4))*35));
+    const worker = async () => {
+      while (performance.now() < end){
+        try{
+          const r = await fetch(CF+'/__down?bytes=25000000&r='+Math.random(), {cache:'no-store', signal:ctrl.signal});
+          const rd = r.body.getReader();
+          while (true){ const {done, value} = await rd.read(); if (done) break; bytes += value.length; if (performance.now() > end){ ctrl.abort(); break; } }
+        }catch(e){ if (ctrl.signal.aborted) break; throw e; }
+      }
+    };
+    try{ await Promise.all([0,1,2,3].map(worker)); } finally { sm.stop(); }
+    return sm.samples.slice(6);   // eerste 1,5 s = opstarten
+  }
+
+  function testUp(sec){
+    return new Promise((resolve, reject) => {
+      const size = 8*1024*1024; const buf = new Uint8Array(size);
+      for (let i=0;i<size;i+=65536) crypto.getRandomValues(buf.subarray(i, Math.min(size,i+65536)));
+      const blob = new Blob([buf]);
+      let bytes = 0, failed = 0; const end = performance.now()+sec*1000; const xs = new Set();
+      const sm = sampler(() => bytes, (m, a) => phase('Upload meten…', mean(a.slice(-8)).toFixed(0), 'Mbps', 45 + Math.min(1,a.length/(sec*4))*55));
+      const send = () => {
+        if (performance.now() > end) return;
+        const x = new XMLHttpRequest(); let prev = 0;
+        x.upload.onprogress = e => { bytes += e.loaded - prev; prev = e.loaded; };
+        x.upload.onload = () => { bytes += size - prev; prev = size; };
+        x.onerror = () => { failed++; };
+        x.onloadend = () => { xs.delete(x); send(); };
+        x.open('POST', CF+'/__up'); x.send(blob); xs.add(x);
+      };
+      for (let i=0;i<4;i++) send();
+      setTimeout(() => {
+        sm.stop(); xs.forEach(x => x.abort());
+        const smp = sm.samples.slice(6);
+        if (!smp.length || (failed > 3 && mean(smp) === 0)) reject(new Error('upload')); else resolve(smp);
+      }, sec*1000);
+    });
+  }
+
+  async function runTest(){
+    if (testing) return; testing = true;
+    $('stBtn').disabled = true; $('stBtn').textContent = 'Bezig met testen…';
+    $('stAdv').classList.add('hidden');
+    try{
+      const p = await testPing(10);
+      const d = await testDown(7);
+      await sleep(300);
+      const u = await testUp(10);
+      const res = {
+        t: Date.now(), ping: p.ping, jitter: p.jitter,
+        down: mean(d), up: mean(u), upStable: pct(u, .2), conn: S.conn
+      };
+      res.stab = res.up ? Math.min(1, res.upStable/res.up) : 0;
+      store.set('tlp_bitrate_test', res);
+      // stabiele uploadwaarde direct in de calculator
+      S.upload = Math.round(res.upStable*10)/10;
+      phase('Klaar', res.upStable.toFixed(0), 'Mbps stabiele upload', 100);
+      showTest(res);
+      render();
+    }catch(e){
+      phase('Test mislukt — controleer de verbinding of gebruik speedtest.net', '–', '', 0);
+    }finally{
+      testing = false; $('stBtn').disabled = false; $('stBtn').textContent = 'Opnieuw testen';
+    }
+  }
+
+  function showTest(res){
+    if (!res) return;
+    $('stBtn').textContent = 'Opnieuw testen';
+    const f1 = n => n.toLocaleString('nl-NL',{maximumFractionDigits: n<10?1:0});
+    $('stRes').classList.remove('hidden');
+    $('rPing').innerHTML = Math.round(res.ping)+' <small>ms</small>';
+    $('rJit').innerHTML = Math.round(res.jitter)+' <small>ms</small>';
+    $('rDown').innerHTML = f1(res.down)+' <small>Mbps</small>';
+    $('rUp').innerHTML = f1(res.up)+' <small>Mbps</small>';
+    $('rUpS').innerHTML = f1(res.upStable)+' <small>Mbps</small>';
+    $('rStab').innerHTML = Math.round(res.stab*100)+'<small>%</small>';
+    if ($('stNum').textContent === '–'){ $('stNum').textContent = res.upStable.toFixed(0); $('stUnit').textContent = 'Mbps stabiele upload'; $('stProg').style.width='100%'; }
+    const d = new Date(res.t);
+    $('stWhen').textContent = 'Laatste test: '+d.toLocaleDateString('nl-NL')+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})+'. Advies rekent met de stabiele upload (de 20% laagste metingen), niet met de piek.';
+    renderAdvice(res);
+  }
+
+  function renderAdvice(res){
+    const box = $('stAdv'); if (!res){ box.classList.add('hidden'); return; }
+    const bf = bestFit(res.upStable);
+    const P = PLAT[S.plat];
+    const notes = [];
+    let head;
+    if (!bf.best){
+      head = 'Te zwak voor een betrouwbare livestream';
+      notes.push(['warn','Zelfs 720p past niet stabiel. Zoek een UTP-aansluiting, een andere lijn of gebruik bonding.']);
+    } else {
+      const b = bf.best;
+      head = (b.h>b.w ? 'Verticaal '+b.w+'×'+b.h : (b.h>=2160?'4K':b.h+'p'))+' @ '+b.f+' fps · '+fmt(b.bitrate)+' kbps';
+      const capLimited = P.cap && bf.limit >= P.cap;
+      if (!bf.fullAvail && S.qual !== 'std' && !capLimited) notes.push(['', 'Bij deze resolutie zit je op de grens van '+(P.cap && bf.limit>=P.cap ? 'wat '+P.label+' toestaat' : 'je verbinding')+': '+QUAL[S.qual].label.toLowerCase()+' wordt niet helemaal gehaald, maar je zit wel boven het platform-advies.']);
+      const higher = (P.cap && b.bitrate >= P.cap - 100);
+      if (higher) notes.push(['', P.label+' is hier de beperking, niet je verbinding. '+(S.plat==='youtube' ? (S.codec==='h264' ? 'Voor nog meer kwaliteit per kbps: kies HEVC of AV1.' : 'Je haalt hier het maximum uit YouTube.') : 'Wil je nog meer kwaliteit, stream dan naar YouTube of een eigen server.')]);
+      const spare = bf.limit - b.bitrate;
+      if (spare > 0 && b.h>=2160 && !P.cap) notes.push(['', 'Je verbinding heeft ruimte over: zet het kwaliteitsniveau gerust op Maximaal.']);
+    }
+    if (res.stab < .6) notes.push(['warn','De upload schommelt flink ('+Math.round(res.stab*100)+'% stabiel). Neem extra marge of gebruik een vaste kabel.']);
+    else if (res.stab < .8) notes.push(['', 'Redelijk stabiel ('+Math.round(res.stab*100)+'%). Het advies rekent al met de lage waarden.']);
+    else notes.push(['', 'Zeer stabiele verbinding ('+Math.round(res.stab*100)+'%).']);
+    if (res.ping > 80) notes.push(['warn','Hoge ping ('+Math.round(res.ping)+' ms): kies een ingest-server dichtbij (bijv. Amsterdam/Frankfurt) of gebruik SRT.']);
+    if (res.jitter > 25) notes.push(['warn','Veel jitter ('+Math.round(res.jitter)+' ms): mogelijk druk netwerk of Wi-Fi. Test nogmaals vlak voor de start.']);
+    if (S.conn === 'wifi' || S.conn === 'mobile') notes.push(['warn','Je test via '+CONN[S.conn].label+': met publiek in de zaal zakt dit meestal flink in.']);
+    box.innerHTML = '<span style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Advies voor '+P.label+'</span>'
+      + '<b class="t">'+head+'</b>'
+      + '<ul>'+notes.map(([c,t])=>'<li class="'+c+'">'+t+'</li>').join('')+'</ul>'
+      + (bf.best ? '<div class="btnrow"><button class="btn gold" id="applyBest">Neem deze instelling over</button></div>' : '');
+    box.classList.remove('hidden');
+    const ab = $('applyBest');
+    if (ab) ab.onclick = () => {
+      const b = bf.best; S.w=b.w; S.h=b.h; S.fps=b.f; S.upload = Math.round(res.upStable*10)/10;
+      const r = RES.find(x=>x.w===b.w && x.h===b.h); S.res = r ? r.k : 'custom';
+      render(); toast('Instelling overgenomen');
+      document.querySelector('.sticky').scrollIntoView({behavior:'smooth'});
+    };
+  }
+
+  $('stBtn').onclick = runTest;
+
+  render();
+  showTest(store.get('tlp_bitrate_test', null));
+})();
+</script>
+</body>
+</html>
