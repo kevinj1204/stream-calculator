@@ -595,22 +595,22 @@
   // Echte netwerk-RTT: Cloudflare geeft die mee in de Server-Timing header (cfL4 rtt, in µs).
   // Valt dat weg, dan: totale tijd min de verwerkingstijd van de testserver.
   async function testPing(n){
-    const t = [];
+    const t = [], j = [];
     for (let i=0; i<n+1; i++){
       const s0 = performance.now();
       const r = await fetch(CF+'/__down?bytes=0&r='+Math.random(), {cache:'no-store'});
       await r.arrayBuffer();
       const wall = performance.now()-s0;
       const st = r.headers.get('server-timing') || '';
-      const rtt = st.match(/[?&]rtt=(\d+)/);
-      let ms;
-      if (rtt) ms = +rtt[1]/1000;
-      else { let srv = 0; st.replace(/dur=([\d.]+)/g, (_,d) => { srv += +d; }); ms = Math.max(1, wall - srv); }
-      if (i>0) t.push(ms);   // eerste meting = verbinding opzetten
+      let srv = 0; st.replace(/dur=([\d.]+)/g, (_,d) => { srv += +d; });
+      const net = Math.max(1, wall - srv);            // per meting: voor jitter
+      const rtt = st.match(/[?&]rtt=(\d+)/);         // TCP-RTT van Cloudflare: voor ping
+      const ms = rtt ? +rtt[1]/1000 : net;
+      if (i>0){ t.push(ms); j.push(net); }            // eerste meting = verbinding opzetten
       phase('Ping meten…', Math.round(ms), 'ms', (i+1)/(n+1)*10);
     }
-    let jit = 0; for (let i=1;i<t.length;i++) jit += Math.abs(t[i]-t[i-1]);
-    return {ping: pct(t,.5), jitter: t.length>1 ? jit/(t.length-1) : 0};
+    let jit = 0; for (let i=1;i<j.length;i++) jit += Math.abs(j[i]-j[i-1]);
+    return {ping: pct(t,.5), jitter: j.length>1 ? jit/(j.length-1) : 0};
   }
 
   // Meet elke 250 ms voor de live weergave; statistiek op vensters van 1 seconde (minder ruis).
