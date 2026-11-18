@@ -49,6 +49,8 @@
   .unit{position:relative}
   .unit span{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
   .unit input{padding-right:58px}
+  #manBox .unit input{padding-right:46px;font-size:15px}
+  #manBox .unit span{right:8px;font-size:11px}
   .chips{display:flex;flex-wrap:wrap;gap:8px}
   .chip{background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:8px 13px;font-size:14px}
   .chip.on{background:rgba(224,179,95,.15);border-color:var(--gold);color:var(--gold2)}
@@ -145,7 +147,21 @@
           <div class="stat"><div class="k">Stabiliteit</div><div class="v" id="rStab">–</div></div>
         </div>
         <div class="st-adv hidden" id="stAdv"></div>
+        <div class="st-adv hidden" id="wkNote" style="border-color:rgba(240,162,74,.45);background:rgba(240,162,74,.08);margin-bottom:10px;font-size:13px">
+          <b style="color:var(--orange)">Safari / iPhone:</b> deze browsers meten uploads boven enkele honderden Mbps te laag.
+          Test op de pc in Chrome of Edge, of vul hieronder je Speedtest-uitslag in.
+        </div>
         <button class="btn gold big" id="stBtn">Start snelheidstest</button>
+        <button class="btn big" id="manBtn" style="margin-top:8px">Speedtest-uitslag invoeren</button>
+        <div class="hidden" id="manBox" style="margin-top:12px">
+          <div class="row" style="grid-template-columns:1fr 1fr 1fr">
+            <div class="field"><label for="mDown">Download</label><div class="unit"><input id="mDown" type="number" inputmode="decimal" placeholder="0"><span>Mbps</span></div></div>
+            <div class="field"><label for="mUp">Upload</label><div class="unit"><input id="mUp" type="number" inputmode="decimal" placeholder="0"><span>Mbps</span></div></div>
+            <div class="field"><label for="mPing">Ping</label><div class="unit"><input id="mPing" type="number" inputmode="decimal" placeholder="0"><span>ms</span></div></div>
+          </div>
+          <button class="btn gold" id="manApply">Gebruik voor advies</button>
+          <div class="hint">Speedtest toont een gemiddelde. Het advies rekent veilig met 85% daarvan als stabiele upload.</div>
+        </div>
         <div class="hint" id="stWhen">Test op het apparaat en de aansluiting die straks echt streamt (bijv. encoder-pc via UTP). De test duurt ongeveer 30 seconden.</div>
       </div>
 
@@ -744,15 +760,15 @@
     $('stBtn').textContent = 'Opnieuw testen';
     const f1 = n => n.toLocaleString('nl-NL',{maximumFractionDigits: n<10?1:0});
     $('stRes').classList.remove('hidden');
-    $('rPing').innerHTML = Math.round(res.ping)+' <small>ms</small>';
-    $('rJit').innerHTML = Math.round(res.jitter)+' <small>ms</small>';
+    $('rPing').innerHTML = res.ping ? Math.round(res.ping)+' <small>ms</small>' : '–';
+    $('rJit').innerHTML = res.jitter == null ? '–' : Math.round(res.jitter)+' <small>ms</small>';
     $('rDown').innerHTML = f1(res.down)+' <small>Mbps</small>';
     $('rUp').innerHTML = f1(res.up)+' <small>Mbps</small>';
     $('rUpS').innerHTML = f1(res.upStable)+' <small>Mbps</small>';
-    $('rStab').innerHTML = Math.round(res.stab*100)+'<small>%</small>';
+    $('rStab').innerHTML = res.stab == null ? '–' : Math.round(res.stab*100)+'<small>%</small>';
     if ($('stNum').textContent === '–'){ $('stNum').textContent = res.upStable.toFixed(0); $('stUnit').textContent = 'Mbps stabiele upload'; $('stProg').style.width='100%'; }
     const d = new Date(res.t);
-    $('stWhen').textContent = 'Laatste test: '+d.toLocaleDateString('nl-NL')+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})+'. Advies rekent met de stabiele upload (de 20% laagste metingen), niet met de piek. Een livestream gebruikt één verbinding; de test meet met meerdere, zoals Speedtest.';
+    $('stWhen').textContent = (res.src==='manual' ? 'Speedtest-uitslag ingevoerd: ' : 'Laatste test: ')+d.toLocaleDateString('nl-NL')+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})+'. Advies rekent met de stabiele upload (de 20% laagste metingen), niet met de piek. Een livestream gebruikt één verbinding; de test meet met meerdere, zoals Speedtest.';
     renderAdvice(res);
   }
 
@@ -775,11 +791,12 @@
       const spare = bf.limit - b.bitrate;
       if (spare > 0 && b.h>=2160 && !P.cap) notes.push(['', 'Je verbinding heeft ruimte over: zet het kwaliteitsniveau gerust op Maximaal.']);
     }
-    if (res.stab < .6) notes.push(['warn','De upload schommelt flink ('+Math.round(res.stab*100)+'% stabiel). Neem extra marge of gebruik een vaste kabel.']);
+    if (res.stab == null) notes.push(['', 'Op basis van je Speedtest-uitslag; stabiliteit niet gemeten, daarom rekent het advies met 85% van je upload.']);
+    else if (res.stab < .6) notes.push(['warn','De upload schommelt flink ('+Math.round(res.stab*100)+'% stabiel). Neem extra marge of gebruik een vaste kabel.']);
     else if (res.stab < .8) notes.push(['', 'Redelijk stabiel ('+Math.round(res.stab*100)+'%). Het advies rekent al met de lage waarden.']);
     else notes.push(['', 'Zeer stabiele verbinding ('+Math.round(res.stab*100)+'%).']);
     if (res.ping > 80) notes.push(['warn','Hoge ping ('+Math.round(res.ping)+' ms): kies een ingest-server dichtbij (bijv. Amsterdam/Frankfurt) of gebruik SRT.']);
-    if (res.jitter > 25) notes.push(['warn','Veel jitter ('+Math.round(res.jitter)+' ms): mogelijk druk netwerk of Wi-Fi. Test nogmaals vlak voor de start.']);
+    if (res.jitter != null && res.jitter > 25) notes.push(['warn','Veel jitter ('+Math.round(res.jitter)+' ms): mogelijk druk netwerk of Wi-Fi. Test nogmaals vlak voor de start.']);
     if (S.conn === 'wifi' || S.conn === 'mobile') notes.push(['warn','Je test via '+CONN[S.conn].label+': met publiek in de zaal zakt dit meestal flink in.']);
     box.innerHTML = '<span style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Advies voor '+P.label+'</span>'
       + '<b class="t">'+head+'</b>'
@@ -794,6 +811,23 @@
       document.querySelector('.sticky').scrollIntoView({behavior:'smooth'});
     };
   }
+
+  // ---------- Safari/WebKit + handmatige invoer ----------
+  const ua = navigator.userAgent;
+  const isWebKit = /AppleWebKit/.test(ua) && !/Chrome\/|Chromium|Edg\//.test(ua);
+  if (isWebKit) $('wkNote').classList.remove('hidden');
+  $('manBtn').onclick = () => $('manBox').classList.toggle('hidden');
+  $('manApply').onclick = () => {
+    const up = parseFloat($('mUp').value), down = parseFloat($('mDown').value) || 0, ping = parseFloat($('mPing').value) || 0;
+    if (!up){ toast('Vul minstens de upload in'); return; }
+    const res = {t: Date.now(), ping, jitter: null, down, up, upStable: up*0.85, stab: null, src: 'manual', conn: S.conn};
+    store.set('tlp_bitrate_test', res);
+    S.upload = Math.round(res.upStable*10)/10;
+    $('stNum').textContent = res.upStable.toFixed(0); $('stUnit').textContent = 'Mbps stabiele upload'; $('stProg').style.width = '100%';
+    $('stPhase').textContent = 'Uit Speedtest-uitslag';
+    $('manBox').classList.add('hidden');
+    showTest(res); render(); toast('Uitslag overgenomen');
+  };
 
   $('stBtn').onclick = runTest;
 
