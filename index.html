@@ -146,7 +146,7 @@
         </div>
         <div class="st-adv hidden" id="stAdv"></div>
         <button class="btn gold big" id="stBtn">Start snelheidstest</button>
-        <div class="hint" id="stWhen">Test op het apparaat en de aansluiting die straks echt streamt (bijv. encoder-pc via UTP). De test duurt ongeveer 20 seconden.</div>
+        <div class="hint" id="stWhen">Test op het apparaat en de aansluiting die straks echt streamt (bijv. encoder-pc via UTP). De test duurt ongeveer 25 seconden.</div>
       </div>
 
       <div class="card">
@@ -592,50 +592,73 @@
     if (prog !== undefined) $('stProg').style.width = prog + '%';
   }
 
+  // Echte netwerk-RTT: Cloudflare geeft die mee in de Server-Timing header (cfL4 rtt, in µs).
+  // Valt dat weg, dan: totale tijd min de verwerkingstijd van de testserver.
   async function testPing(n){
     const t = [];
     for (let i=0; i<n+1; i++){
       const s0 = performance.now();
-      await fetch(CF+'/__down?bytes=0&r='+Math.random(), {cache:'no-store'});
-      if (i>0) t.push(performance.now()-s0);   // eerste meting = verbinding opzetten
-      phase('Ping meten…', Math.round(t[t.length-1]||0), 'ms', (i+1)/(n+1)*10);
+      const r = await fetch(CF+'/__down?bytes=0&r='+Math.random(), {cache:'no-store'});
+      await r.arrayBuffer();
+      const wall = performance.now()-s0;
+      const st = r.headers.get('server-timing') || '';
+      const rtt = st.match(/[?&]rtt=(\d+)/);
+      let ms;
+      if (rtt) ms = +rtt[1]/1000;
+      else { let srv = 0; st.replace(/dur=([\d.]+)/g, (_,d) => { srv += +d; }); ms = Math.max(1, wall - srv); }
+      if (i>0) t.push(ms);   // eerste meting = verbinding opzetten
+      phase('Ping meten…', Math.round(ms), 'ms', (i+1)/(n+1)*10);
     }
     let jit = 0; for (let i=1;i<t.length;i++) jit += Math.abs(t[i]-t[i-1]);
     return {ping: pct(t,.5), jitter: t.length>1 ? jit/(t.length-1) : 0};
   }
 
+  // Meet elke 250 ms voor de live weergave; statistiek op vensters van 1 seconde (minder ruis).
   function sampler(getBytes, onTick){
-    let last = 0, lastT = performance.now(); const samples = [];
+    const marks = [[performance.now(), 0]];
     const id = setInterval(() => {
-      const now = performance.now(), b = getBytes();
-      const m = (b-last)*8/((now-lastT)/1000)/1e6; last=b; lastT=now; samples.push(m); onTick(m, samples);
+      const now = performance.now(), b = getBytes(); marks.push([now, b]);
+      const k = Math.max(0, marks.length-5);   // laatste ~1 s
+      const m = (b-marks[k][1])*8/((now-marks[k][0])/1000)/1e6;
+      onTick(m, marks.length);
     }, 250);
-    return {samples, stop: () => clearInterval(id)};
+    return {
+      stop: () => clearInterval(id),
+      windows: (skipSec) => {
+        const out = [];
+        for (let i=4; i<marks.length; i+=4){
+          const [t1,b1] = marks[i], [t0,b0] = marks[i-4];
+          if ((t0 - marks[0][0]) / 1000 >= skipSec) out.push((b1-b0)*8/((t1-t0)/1000)/1e6);
+        }
+        return out;
+      }
+    };
   }
 
   async function testDown(sec){
     let bytes = 0; const end = performance.now()+sec*1000; const ctrl = new AbortController();
-    const sm = sampler(() => bytes, (m, a) => phase('Download meten…', mean(a.slice(-8)).toFixed(0), 'Mbps', 10 + Math.min(1,a.length/(sec*4))*35));
+    const sm = sampler(() => bytes, (m, n) => phase('Download meten…', m.toFixed(0), 'Mbps', 10 + Math.min(1,n/(sec*4))*35));
     const worker = async () => {
       while (performance.now() < end){
         try{
-          const r = await fetch(CF+'/__down?bytes=25000000&r='+Math.random(), {cache:'no-store', signal:ctrl.signal});
+          const r = await fetch(CF+'/__down?bytes=50000000&r='+Math.random(), {cache:'no-store', signal:ctrl.signal});
           const rd = r.body.getReader();
           while (true){ const {done, value} = await rd.read(); if (done) break; bytes += value.length; if (performance.now() > end){ ctrl.abort(); break; } }
         }catch(e){ if (ctrl.signal.aborted) break; throw e; }
       }
     };
-    try{ await Promise.all([0,1,2,3].map(worker)); } finally { sm.stop(); }
-    return sm.samples.slice(6);   // eerste 1,5 s = opstarten
+    try{ await Promise.all([0,1,2,3,4,5].map(worker)); } finally { sm.stop(); }
+    return sm.windows(2);   // eerste 2 s = opstarten
   }
 
+  // 8 parallelle verbindingen met grote blokken: nodig om gigabit-lijnen vol te krijgen (zoals Speedtest).
   function testUp(sec){
     return new Promise((resolve, reject) => {
-      const size = 8*1024*1024; const buf = new Uint8Array(size);
+      const size = 25*1000*1000; const buf = new Uint8Array(size);
       for (let i=0;i<size;i+=65536) crypto.getRandomValues(buf.subarray(i, Math.min(size,i+65536)));
       const blob = new Blob([buf]);
       let bytes = 0, failed = 0; const end = performance.now()+sec*1000; const xs = new Set();
-      const sm = sampler(() => bytes, (m, a) => phase('Upload meten…', mean(a.slice(-8)).toFixed(0), 'Mbps', 45 + Math.min(1,a.length/(sec*4))*55));
+      const sm = sampler(() => bytes, (m, n) => phase('Upload meten…', m.toFixed(0), 'Mbps', 45 + Math.min(1,n/(sec*4))*55));
       const send = () => {
         if (performance.now() > end) return;
         const x = new XMLHttpRequest(); let prev = 0;
@@ -645,11 +668,11 @@
         x.onloadend = () => { xs.delete(x); send(); };
         x.open('POST', CF+'/__up'); x.send(blob); xs.add(x);
       };
-      for (let i=0;i<4;i++) send();
+      for (let i=0;i<8;i++) send();
       setTimeout(() => {
         sm.stop(); xs.forEach(x => x.abort());
-        const smp = sm.samples.slice(6);
-        if (!smp.length || (failed > 3 && mean(smp) === 0)) reject(new Error('upload')); else resolve(smp);
+        const w = sm.windows(2);
+        if (!w.length || (failed > 3 && mean(w) === 0)) reject(new Error('upload')); else resolve(w);
       }, sec*1000);
     });
   }
@@ -659,10 +682,10 @@
     $('stBtn').disabled = true; $('stBtn').textContent = 'Bezig met testen…';
     $('stAdv').classList.add('hidden');
     try{
-      const p = await testPing(10);
-      const d = await testDown(7);
+      const p = await testPing(15);
+      const d = await testDown(8);
       await sleep(300);
-      const u = await testUp(10);
+      const u = await testUp(12);
       const res = {
         t: Date.now(), ping: p.ping, jitter: p.jitter,
         down: mean(d), up: mean(u), upStable: pct(u, .2), conn: S.conn
@@ -694,7 +717,7 @@
     $('rStab').innerHTML = Math.round(res.stab*100)+'<small>%</small>';
     if ($('stNum').textContent === '–'){ $('stNum').textContent = res.upStable.toFixed(0); $('stUnit').textContent = 'Mbps stabiele upload'; $('stProg').style.width='100%'; }
     const d = new Date(res.t);
-    $('stWhen').textContent = 'Laatste test: '+d.toLocaleDateString('nl-NL')+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})+'. Advies rekent met de stabiele upload (de 20% laagste metingen), niet met de piek.';
+    $('stWhen').textContent = 'Laatste test: '+d.toLocaleDateString('nl-NL')+' '+d.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})+'. Advies rekent met de stabiele upload (de 20% laagste metingen), niet met de piek. Een livestream gebruikt één verbinding; de test meet met meerdere, zoals Speedtest.';
     renderAdvice(res);
   }
 
