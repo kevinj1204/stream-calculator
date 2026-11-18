@@ -146,7 +146,7 @@
         </div>
         <div class="st-adv hidden" id="stAdv"></div>
         <button class="btn gold big" id="stBtn">Start snelheidstest</button>
-        <div class="hint" id="stWhen">Test op het apparaat en de aansluiting die straks echt streamt (bijv. encoder-pc via UTP). De test duurt ongeveer 25 seconden.</div>
+        <div class="hint" id="stWhen">Test op het apparaat en de aansluiting die straks echt streamt (bijv. encoder-pc via UTP). De test duurt ongeveer 30 seconden.</div>
       </div>
 
       <div class="card">
@@ -605,7 +605,8 @@
       let srv = 0; st.replace(/dur=([\d.]+)/g, (_,d) => { srv += +d; });
       const net = Math.max(1, wall - srv);            // per meting: voor jitter
       const rtt = st.match(/[?&]rtt=(\d+)/);         // TCP-RTT van Cloudflare: voor ping
-      const ms = rtt ? +rtt[1]/1000 : net;
+      const rttMs = rtt ? +rtt[1]/1000 : 0;
+      const ms = rttMs >= 1 ? rttMs : net;            // Safari/HTTP3 geeft soms 0 terug
       if (i>0){ t.push(ms); j.push(net); }            // eerste meting = verbinding opzetten
       phase('Ping meten…', Math.round(ms), 'ms', (i+1)/(n+1)*10);
     }
@@ -624,10 +625,16 @@
     }, 250);
     return {
       stop: () => clearInterval(id),
-      windows: (skipSec) => {
+      // gemiddelde over de hele meting na de opstartfase
+      avg: (skipSec) => {
+        const t0 = marks[0][0] + skipSec*1000;
+        const a = marks.find(m => m[0] >= t0), b = marks[marks.length-1];
+        return a && b[0] > a[0] ? (b[1]-a[1])*8/((b[0]-a[0])/1000)/1e6 : 0;
+      },
+      windows: (skipSec, step=4) => {
         const out = [];
-        for (let i=4; i<marks.length; i+=4){
-          const [t1,b1] = marks[i], [t0,b0] = marks[i-4];
+        for (let i=step; i<marks.length; i+=step){
+          const [t1,b1] = marks[i], [t0,b0] = marks[i-step];
           if ((t0 - marks[0][0]) / 1000 >= skipSec) out.push((b1-b0)*8/((t1-t0)/1000)/1e6);
         }
         return out;
@@ -648,13 +655,15 @@
       }
     };
     try{ await Promise.all([0,1,2,3,4,5].map(worker)); } finally { sm.stop(); }
-    return sm.windows(2);   // eerste 2 s = opstarten
+    return {w: sm.windows(2, 8), avg: sm.avg(2)};   // eerste 2 s = opstarten
   }
 
   // 8 parallelle verbindingen met grote blokken: nodig om gigabit-lijnen vol te krijgen (zoals Speedtest).
+  // 12 parallelle verbindingen met blokken van 8 MB: vult gigabit-lijnen, en houdt de hoeveelheid
+  // 'onderweg'-data klein zodat ook browsers met grove voortgangsmeldingen (Safari) goed meten.
   function testUp(sec){
     return new Promise((resolve, reject) => {
-      const size = 25*1000*1000; const buf = new Uint8Array(size);
+      const size = 8*1000*1000; const buf = new Uint8Array(size);
       for (let i=0;i<size;i+=65536) crypto.getRandomValues(buf.subarray(i, Math.min(size,i+65536)));
       const blob = new Blob([buf]);
       let bytes = 0, failed = 0; const end = performance.now()+sec*1000; const xs = new Set();
@@ -663,16 +672,17 @@
         if (performance.now() > end) return;
         const x = new XMLHttpRequest(); let prev = 0;
         x.upload.onprogress = e => { bytes += e.loaded - prev; prev = e.loaded; };
-        x.upload.onload = () => { bytes += size - prev; prev = size; };
+        x.onload = () => { bytes += size - prev; prev = size; };
         x.onerror = () => { failed++; };
         x.onloadend = () => { xs.delete(x); send(); };
         x.open('POST', CF+'/__up'); x.send(blob); xs.add(x);
       };
-      for (let i=0;i<8;i++) send();
+      for (let i=0;i<12;i++) send();
       setTimeout(() => {
+        // eind van de meting: alleen tellen wat bevestigd is, lopende blokken afbreken
         sm.stop(); xs.forEach(x => x.abort());
-        const w = sm.windows(2);
-        if (!w.length || (failed > 3 && mean(w) === 0)) reject(new Error('upload')); else resolve(w);
+        const w = sm.windows(2, 8);   // vensters van 2 s
+        if (!w.length || (failed > 3 && mean(w) === 0)) reject(new Error('upload')); else resolve({w, avg: sm.avg(2)});
       }, sec*1000);
     });
   }
@@ -685,10 +695,10 @@
       const p = await testPing(15);
       const d = await testDown(8);
       await sleep(300);
-      const u = await testUp(12);
+      const u = await testUp(14);
       const res = {
         t: Date.now(), ping: p.ping, jitter: p.jitter,
-        down: mean(d), up: mean(u), upStable: pct(u, .2), conn: S.conn
+        down: d.avg || mean(d.w), up: u.avg || mean(u.w), upStable: Math.min(pct(u.w, .2), u.avg || Infinity), conn: S.conn
       };
       res.stab = res.up ? Math.min(1, res.upStable/res.up) : 0;
       store.set('tlp_bitrate_test', res);
