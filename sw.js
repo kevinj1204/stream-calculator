@@ -1,5 +1,5 @@
 // Offline cache: de calculator werkt ook zonder internet (handig op locatie).
-const CACHE = 'tlp-bitrate-v3';
+const CACHE = 'tlp-bitrate-v4';
 const FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {

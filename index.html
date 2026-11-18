@@ -659,32 +659,57 @@
   }
 
   // 8 parallelle verbindingen met grote blokken: nodig om gigabit-lijnen vol te krijgen (zoals Speedtest).
-  // 12 parallelle verbindingen met blokken van 8 MB: vult gigabit-lijnen, en houdt de hoeveelheid
-  // 'onderweg'-data klein zodat ook browsers met grove voortgangsmeldingen (Safari) goed meten.
-  function testUp(sec){
-    return new Promise((resolve, reject) => {
-      const size = 8*1000*1000; const buf = new Uint8Array(size);
-      for (let i=0;i<size;i+=65536) crypto.getRandomValues(buf.subarray(i, Math.min(size,i+65536)));
-      const blob = new Blob([buf]);
-      let bytes = 0, failed = 0; const end = performance.now()+sec*1000; const xs = new Set();
-      const sm = sampler(() => bytes, (m, n) => phase('Upload meten…', m.toFixed(0), 'Mbps', 45 + Math.min(1,n/(sec*4))*55));
-      const send = () => {
-        if (performance.now() > end) return;
-        const x = new XMLHttpRequest(); let prev = 0;
-        x.upload.onprogress = e => { bytes += e.loaded - prev; prev = e.loaded; };
-        x.onload = () => { bytes += size - prev; prev = size; };
-        x.onerror = () => { failed++; };
-        x.onloadend = () => { xs.delete(x); send(); };
-        x.open('POST', CF+'/__up'); x.send(blob); xs.add(x);
-      };
-      for (let i=0;i<12;i++) send();
-      setTimeout(() => {
-        // eind van de meting: alleen tellen wat bevestigd is, lopende blokken afbreken
-        sm.stop(); xs.forEach(x => x.abort());
-        const w = sm.windows(2, 8);   // vensters van 2 s
-        if (!w.length || (failed > 3 && mean(w) === 0)) reject(new Error('upload')); else resolve({w, avg: sm.avg(2)});
-      }, sec*1000);
-    });
+  // Upload: alleen blokken tellen die de server volledig heeft ontvangen (fetch, geen voortgangs-events).
+  // Werkt in elke browser gelijk, ook in Safari. Blokgrootte past zich aan zodat elk blok ~1 s duurt.
+  async function testUp(sec){
+    const MAX = 16*1000*1000, MIN = 256*1000, PAR = 8;
+    const buf = new Uint8Array(MAX);
+    for (let i=0;i<MAX;i+=65536) crypto.getRandomValues(buf.subarray(i, Math.min(MAX,i+65536)));
+    const big = new Blob([buf]);
+    const t0 = performance.now(), end = t0 + sec*1000, warm = t0 + 2000;
+    const ctrl = new AbortController();
+    const done = [];            // [tijdstip, bytes] per voltooid blok
+    let cur = 1000*1000, failed = 0;
+    const rateSince = (from) => {
+      const b = done.filter(d => d[0] >= from).reduce((a,d)=>a+d[1],0);
+      const span = (performance.now() - from)/1000;
+      return span > 0 ? b*8/span/1e6 : 0;
+    };
+    const tick = setInterval(() => {
+      const el = performance.now() - t0;
+      phase('Upload meten…', rateSince(Math.max(t0, performance.now()-2000)).toFixed(0), 'Mbps', 45 + Math.min(1, el/(sec*1000))*55);
+    }, 250);
+    const worker = async () => {
+      while (performance.now() < end){
+        const size = cur, s0 = performance.now();
+        try{
+          const r = await fetch(CF+'/__up?r='+Math.random(), {method:'POST', body: big.slice(0, size), cache:'no-store', signal: ctrl.signal});
+          await r.arrayBuffer();
+          const now = performance.now(), dur = (now - s0)/1000;
+          if (now <= end) done.push([now, size]);
+          if (dur < 0.6) cur = Math.min(MAX, Math.round(cur*2));
+          else if (dur > 2) cur = Math.max(MIN, Math.round(cur/2));
+        }catch(e){
+          if (ctrl.signal.aborted) break;
+          if (++failed > 6) throw e;
+        }
+      }
+    };
+    const stopper = setTimeout(() => ctrl.abort(), sec*1000);
+    try{ await Promise.all(Array.from({length:PAR}, worker)); }
+    finally{ clearInterval(tick); clearTimeout(stopper); }
+    const after = done.filter(d => d[0] >= warm);
+    if (!after.length) throw new Error('upload');
+    const last = Math.max(...after.map(d=>d[0]));
+    const total = after.reduce((a,d)=>a+d[1],0);
+    const avg = total*8/((last - warm)/1000 || 1)/1e6;
+    // vensters van 2 s voor stabiliteit
+    const w = [];
+    for (let a = warm; a + 2000 <= last + 1; a += 2000){
+      const b = done.filter(d => d[0] >= a && d[0] < a+2000).reduce((x,d)=>x+d[1],0);
+      w.push(b*8/2/1e6);
+    }
+    return {w: w.length ? w : [avg], avg};
   }
 
   async function runTest(){
